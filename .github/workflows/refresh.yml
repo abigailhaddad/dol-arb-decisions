@@ -1,0 +1,58 @@
+name: Refresh ARB decisions
+
+# Mondays 11:20 UTC: re-read both ARB listings on dol.gov (about 360 requests, one second apart), fetch the
+# text of new decisions, merge into the Hugging Face table, upload only if something changed.
+# Needs the HF_TOKEN secret (write access to abigailhaddad/dol-arb-decisions). Without it the run does
+# everything except the upload and says so. A failed run emails the owner.
+
+on:
+  schedule:
+    - cron: "20 11 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests
+      - name: Refresh
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::notice::HF_TOKEN secret is not set, so this run will not upload. Add it under Settings > Secrets and variables > Actions."
+          fi
+          python src/refresh.py
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: report
+          path: out/report.json
+          if-no-files-found: ignore
+
+      # GitHub disables scheduled workflows in a public repo after 60 days with no commits.
+      - name: Keepalive commit
+        if: ${{ always() }}
+        run: |
+          age=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "newest commit is $age days old"
+          if [ "$age" -ge 45 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keepalive: no commits in $age days"
+            git push
+          fi
