@@ -1,0 +1,62 @@
+# Column descriptions for the published tables. src/data_docs.py reads this file and the parquet files and
+# writes docs/data_dictionary.md (and the same section in dataset_card.md); it stops with an error if a
+# parquet column is missing here or a column here is not in the parquet, so the dictionary can't drift
+# from the schema.
+#
+# Each description comes from the code that builds the column (src/arb.py, src/build.py, src/match.py,
+# src/text.py, src/refresh.py) or from DOL's two ARB listings. A column listed in `unconfirmed` is one whose
+# meaning the source doesn't define; the dictionary marks it.
+
+dataset = "abigailhaddad/dol-arb-decisions"
+card = "dataset_card.md"  # the dataset card kept in this repo; `write` updates its data dictionary section
+
+[tables.decisions]
+file = "decisions.parquet"
+config = "decisions"
+grain = "One row per ARB decision: each decision line on DOL's by-name listing (a decision listed under two names with the same links and date is one row), plus decisions only the by-month listing has."
+primary_key = "decision_id"
+
+[tables.decisions.columns]
+decision_id = "The decision's link from `/PUBLIC/` on, without the `.../ARB_DECISIONS/` folder prefix, upper-cased (e.g. `DBA/2026-0047-DBAP.PDF`). `UNLINKED-nnn` for a row with no link. When two rows share a link, `@` and the date are added."
+decision_date = "The first date in parentheses on the decision line, e.g. `(ARB June 24, 2015)`. Null when the listing's date is broken or absent (not guessed)."
+issued_by = "The issuer before that date: `ARB`, `Sec'y`, `PWBA`, `OAA` or `Deputy Sec'y`. Null when the date has no issuer."
+decision_title = "The decision line's title as listed, before the date (e.g. `Final Decision and Order`). Not standardized: `&` and `and` forms both appear."
+case_name = "The parties from the caption, after the leading ARB and ALJ numbers (e.g. `Powers v. Pinnacle Airlines, Inc.`). For by-date-only rows, the text before the ARB or ALJ number on the month page."
+indexed_names = "The bold name(s) the by-name listing files the caption under, `; `-separated when one decision is listed under two names. Null for by-date-only rows."
+arb_numbers = "ARB case numbers from the caption, before any ALJ number, `; `-separated (e.g. `96-134; 98-115`)."
+alj_numbers = "ALJ case numbers from the caption (year-code-number, e.g. `2004-AIR-11`), `; `-separated."
+program = "Case-type code: the folder in the decision's link (`STA`, `ERA`, `SOX`, `AIR`, `DBA`, ...). For a row with no such folder, the code from its ALJ number when it has exactly one. These are OALJ's case-type codes; the table doesn't translate them."
+program_source = "Where `program` came from: `link folder` or `ALJ number`."
+file_number_in_caption = "True if the ARB number in the file name (e.g. `2024-0049-ERAP.pdf` or `09_076.SOXP.PDF`) is among the ARB numbers in the caption or decision line. Null when the file name has no ARB number."
+url = "The decision line's first document link, absolute. Most pre-2020 links are on www.oalj.dol.gov, newer ones on www.dol.gov. Null when the line has no link."
+other_urls = "The line's other document links (e.g. an HTML or slip opinion copy), space-separated."
+listing_line = "The decision line's text as listed (title, issuer and date, `PDF`)."
+caption = "The caption paragraph above the decision line on the by-name listing (ARB and ALJ numbers, parties). Null for by-date-only rows and lines with no caption."
+listing_page = "The page the row came from: `ARBLIST_A-H`, `ARBLIST_I-P` or `ARBLIST_Q-Z` on the by-name listing, or the month page (`MM_YYYY`) for by-date-only rows."
+times_listed = "How many by-name decision lines were collapsed into this row (same links and date)."
+listed_on = "`both` (a by-month link matched the row), `by-name, unmatched` (no by-month link matched; not proof it is missing there) or `by-date only` (added from the by-month listing)."
+date_listing_months = "Months (YYYY-MM) of the by-month pages whose links matched the row, `; `-separated."
+text_chars = "Length of the text in `decision_text` in characters; 0 when there is none."
+pages = "Number of PDF pages, counted from pdftotext's page breaks. Null when there is no PDF text."
+text_status = "Result of fetching the document: `ok`, `ok (html)`, `short html`, `no text layer` (a scan; no OCR was done), `pdftotext error`, `HTTP <code>`, `not a PDF or HTML file`, `error: <type>`, `not fetched: robots.txt disallows` (www.oalj.dol.gov disallows all crawling) or `no document link`."
+
+[tables.decision_text]
+file = "decision_text.parquet"
+config = "decision_text"
+grain = "One row per row of `decisions`, with the text of its document where it was fetched."
+primary_key = "decision_id"
+
+[tables.decision_text.columns]
+decision_id = "Same as `decisions.decision_id`."
+url = "Same as `decisions.url`: the document the text came from."
+text_status = "Same as `decisions.text_status`."
+pages = "Same as `decisions.pages`."
+text_chars = "Same as `decisions.text_chars`."
+text = "The document's text from pdftotext (PDF, UTF-8, form feed between pages) or the page text (HTML). Null when not fetched or nothing was returned."
+
+[[joins]]
+left = "decisions.decision_id"
+right = "decision_text.decision_id"
+kind = "||--||"
+label = "decision_id"
+note = "Exact join, one to one."
