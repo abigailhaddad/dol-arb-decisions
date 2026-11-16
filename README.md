@@ -22,3 +22,18 @@ A GitHub Action runs every Monday, re-reads both lists, and uploads only if some
 `src/arb.py` parses the pages. `src/match.py` matches the month list's links to rows. The checks and their results are on the dataset card (`dataset_card.md`, uploaded as the Hugging Face README); the most recent live sample is in `checks/`.
 
 dol.gov's CDN refused the custom User-Agent strings I tried and accepts the `requests` default, so the code sends the default.
+
+## Data dictionary
+
+[`docs/data_dictionary.md`](docs/data_dictionary.md) lists every column of both tables with its type, a description, the share of rows that have a value, and an example, plus a diagram of how the tables join. Types, counts and examples are read from the published parquet files; descriptions are in [`docs/tables.toml`](docs/tables.toml), written from the code that builds each column. Regenerate it with
+
+    python src/data_docs.py fetch data   # download the current files from Hugging Face
+    python src/data_docs.py write data   # write docs/data_dictionary.md
+
+`write` also updates the same section in `dataset_card.md`, the dataset card kept in this repo; the card is still uploaded to Hugging Face by hand. `src/data_docs.py` stops with an error if a parquet column has no description in `docs/tables.toml` or a described column is gone, and the weekly workflow runs that check too.
+
+## SQLite download
+
+The weekly workflow builds `dol-arb-decisions.sqlite` from the files on Hugging Face (tables `decisions` and `decision_text`, plus `_source`, which records the Hugging Face commit) and attaches it to the GitHub release [`latest-data`](https://github.com/abigailhaddad/dol-arb-decisions/releases/tag/latest-data). The release is replaced whenever the Hugging Face commit changes. To build it yourself:
+
+    python src/build_sqlite.py data dol-arb-decisions.sqlite
